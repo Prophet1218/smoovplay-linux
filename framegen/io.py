@@ -17,6 +17,7 @@ import cv2
 import numpy as np
 
 from .fill import Panorama, layout, panorama_t, visible, wider
+from .glblit import Blitter
 
 TICK = 1.0 / 60.0
 
@@ -360,10 +361,11 @@ def _gl_image(GL, img: np.ndarray, hdr: bool):
 
 class _Panel:
     """A BGR image in a GL texture of its own, blitted 1:1 over the frame (menu, messages). hdr: over an HDR10
-    picture (see _gl_image)."""
+    picture (see _gl_image). blitter: the window's (framegen/glblit.py)."""
 
-    def __init__(self, GL, hdr: bool = False) -> None:
+    def __init__(self, GL, hdr: bool = False, blitter: Blitter | None = None) -> None:
         self.GL, self.w, self.h, self.hdr = GL, 0, 0, hdr
+        self.blitter = blitter if blitter is not None else Blitter(GL)
         self.tex, self.fbo = GL.glGenTextures(1), GL.glGenFramebuffers(1)
 
     def update(self, img: np.ndarray) -> None:
@@ -383,10 +385,8 @@ class _Panel:
 
     def blit(self, x: int, top: int) -> None:
         """top: GL y of the image's top edge (GL y grows upwards; image rows go down)."""
-        GL = self.GL
-        GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, self.fbo)
-        GL.glBlitFramebuffer(0, 0, self.w, self.h, x, top, x + self.w, top - self.h, GL.GL_COLOR_BUFFER_BIT,
-                             GL.GL_NEAREST)
+        self.blitter.copy(self.tex, self.w, self.h, self.fbo, (0, 0, self.w, self.h),
+                          (x, top, x + self.w, top - self.h), False)
 
     def close(self) -> None:
         self.GL.glDeleteFramebuffers(1, [self.fbo])
@@ -569,6 +569,7 @@ class GLWindowSink:
         self._keyed = False
         self._took_from: set = set()
 
+        self.blitter = Blitter(GL)  # plain copies to the screen: glBlitFramebuffer, or a shader where it's refused
         self.tex = GL.glGenTextures(1)
         GL.glBindTexture(GL.GL_TEXTURE_2D, self.tex)
         GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_LINEAR)
@@ -640,8 +641,10 @@ class GLWindowSink:
         self.choices, self.unavailable = dict(choices or {}), dict(unavailable or {})
         self.note_presentation()
         self.menu = Menu(st, allowed=self.allowed, disabled=self.disabled, restart_reasons=restart_reasons)
-        self.menu_panel, self.toast_panel = _Panel(GL, self.hdr10), _Panel(GL, self.hdr10)
-        self.mini_panel, self._mini_state = _Panel(GL, self.hdr10), None  # the stats overlay, Minimal or Detailed
+        self.menu_panel = _Panel(GL, self.hdr10, self.blitter)
+        self.toast_panel = _Panel(GL, self.hdr10, self.blitter)
+        # the stats overlay, Minimal or Detailed
+        self.mini_panel, self._mini_state = _Panel(GL, self.hdr10, self.blitter), None
         self._detail_w, self._detail_ui = 0, None  # the detailed box's width so far, at this size (it only grows)
         self._menu_top = None  # (GL y of the menu's top, the picture's (y0, height) it was placed in) while it's open
         self._menu_state = self._toast_state = None
@@ -1228,9 +1231,7 @@ class GLWindowSink:
             GL.glBindFramebuffer(GL.GL_DRAW_FRAMEBUFFER, self._target())
             GL.glViewport(0, 0, fw, fh)
             GL.glClear(GL.GL_COLOR_BUFFER_BIT)
-            GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, self.fbo)
-            GL.glBlitFramebuffer(0, 0, self.w, self.h, x0, y0 + dh, x0 + dw, y0, GL.GL_COLOR_BUFFER_BIT,
-                                 GL.GL_LINEAR)
+            self._plain(x0, y0, dw, dh)
             dots = "." * (1 + int(time.perf_counter() - t0) % 3)
             self.toast(f"{text}{dots:<3}", 1.0)
             self._draw_ui(*visible(dw, dh, x0, y0, fw, fh))
@@ -1259,8 +1260,7 @@ class GLWindowSink:
             GL.glBindFramebuffer(GL.GL_DRAW_FRAMEBUFFER, self._target())
             GL.glViewport(0, 0, fw, fh)
             GL.glClear(GL.GL_COLOR_BUFFER_BIT)
-            GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, self.fbo)  # the last frame, plain (no upscaler or look)
-            GL.glBlitFramebuffer(0, 0, self.w, self.h, x0, y0 + dh, x0 + dw, y0, GL.GL_COLOR_BUFFER_BIT, GL.GL_LINEAR)
+            self._plain(x0, y0, dw, dh)  # the last frame, plain (no upscaler or look)
             self._draw_ui(*visible(dw, dh, x0, y0, fw, fh))
             self._present()
         self.settle()
@@ -1328,10 +1328,7 @@ class GLWindowSink:
         elif upscale and mode == "vsr":
             self._vsr_draw(x0, y0, dw, dh)
         else:
-            GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, self.fbo)
-            # Image row 0 is the top; GL row 0 is the bottom, so blit with destination Y flipped.
-            GL.glBlitFramebuffer(0, 0, self.w, self.h, x0, y0 + dh, x0 + dw, y0, GL.GL_COLOR_BUFFER_BIT,
-                                 GL.GL_LINEAR)
+            self._plain(x0, y0, dw, dh)
         if pano:
             self.panorama.draw(screen, fw, fh, panorama_t(fw, fh, self.w, self.h))
             label += " + panorama"
@@ -1354,12 +1351,16 @@ class GLWindowSink:
         cmd, self.cmd = self.cmd, None
         return cmd
 
+    def _plain(self, x0: int, y0: int, dw: int, dh: int) -> None:
+        """The frame's texture into the picture's rectangle with no upscaler: a bilinear copy (blit) to the bound
+        draw framebuffer. Image row 0 is the top and GL's row 0 the bottom, so the destination's Y is flipped."""
+        self.blitter.copy(self.tex, self.w, self.h, self.fbo, (0, 0, self.w, self.h), (x0, y0 + dh, x0 + dw, y0),
+                          True)
+
     def _vsr_draw(self, x0: int, y0: int, dw: int, dh: int) -> None:
         """RTX VSR from the staged RGBA frame straight into a window-sized GL texture, then a 1:1 blit."""
-        GL = self.GL
-        fbo = self._vsr_render(dw, dh)[1]
-        GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, fbo)
-        GL.glBlitFramebuffer(0, 0, dw, dh, x0, y0 + dh, x0 + dw, y0, GL.GL_COLOR_BUFFER_BIT, GL.GL_NEAREST)
+        tex, fbo = self._vsr_render(dw, dh)
+        self.blitter.copy(tex, dw, dh, fbo, (0, 0, dw, dh), (x0, y0 + dh, x0 + dw, y0), False)
 
     def _vsr_render(self, dw: int, dh: int) -> tuple[int, int]:
         """RTX VSR into the window-sized texture (row 0 = the image's top); returns (texture, framebuffer)."""
@@ -1513,6 +1514,7 @@ class GLWindowSink:
         self.menu_panel.close()
         self.toast_panel.close()
         self.mini_panel.close()
+        self.blitter.close()
         if self.vsr is not None:
             self._vsr_target_free()
             self.vsr.close()

@@ -250,6 +250,11 @@ When the window is bigger than the frame (fullscreen on a 1440p monitor, say), i
     picks it when NVIDIA's package is there too.
 
 The overlay names the scaler in use, and the GPU time per frame is printed on exit.
+
+Where no upscaler runs (the window is the frame's size or smaller, or Bilinear), and for the menu and messages,
+the frame is copied with `glBlitFramebuffer`. A driver that refuses that (an AMD one did, on the first frame) gets
+the same copy drawn by a shader from then on, said once in the log (`framegen/glblit.py`). `FRAMEGEN_BLIT=shader`
+uses the shader from the start, to try that path on any card.
 </details>
 
 <details>
