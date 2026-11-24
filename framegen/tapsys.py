@@ -50,6 +50,13 @@ elif LINUX:
     def qpc_freq() -> int:
         return 1_000_000_000
 
+else:  # elsewhere (macOS): there's no tap, but the module still imports, so the ring's other code and tests can
+    def qpc() -> int:
+        return time.perf_counter_ns()
+
+    def qpc_freq() -> int:
+        return 1_000_000_000
+
 
 def unsupported() -> RuntimeError:
     return RuntimeError("the chiaki frame tap works on Windows and Linux only")
