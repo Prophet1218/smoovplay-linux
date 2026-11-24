@@ -157,6 +157,7 @@ class _SwitchedAwayShell(_FullScreenShell):
     TOP = {**_FullScreenShell.TOP, 100: ("applicationframehost.exe", "Xbox", [])}
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="listing windows (EnumWindows) is Windows-only")
 @pytest.mark.parametrize("shell", [_FullScreenShell, _SwitchedAwayShell])
 def test_a_store_app_in_full_screen_is_noted_not_listed(monkeypatch, shell):
     shell(monkeypatch)
@@ -167,6 +168,7 @@ def test_a_store_app_in_full_screen_is_noted_not_listed(monkeypatch, shell):
     assert left == {"xboxpcapp.exe": {window.FULL_SCREEN}}
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="listing windows (EnumWindows) is Windows-only")
 def test_play_says_to_leave_full_screen(monkeypatch):
     _FullScreenShell(monkeypatch)
     with pytest.raises(RuntimeError, match="the Xbox app is in full screen.*Shift\\+Win\\+Enter"):
