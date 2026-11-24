@@ -1,7 +1,10 @@
 # SmoovPlay on Linux: PS5 Remote Play
 
 > [!NOTE]
-> **Experimental.** Tested on one PC: an RTX 5070 with NVIDIA's 615.78 driver, on KDE Plasma (Wayland). The PS5 was
+> **Experimental and community-run.** The Linux port comes from contributors. We don't test or support Linux
+> ourselves, so please put "Linux" in the title of an issue about it.
+>
+> Tested on one PC: an RTX 5070 with NVIDIA's 615.78 driver, on KDE Plasma (Wayland). The PS5 was
 > wired to the router, playing GTA VI. Only the PS5 Remote Play path has been tried. The launcher, capture cards,
 > app windows and AMD/Intel graphics are untested on Linux. Everything runs from a terminal.
 

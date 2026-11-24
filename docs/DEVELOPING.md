@@ -12,6 +12,7 @@ and how to get it, see the [README](../../README.md).
 | [`run.py`](../run.py) | Command-line entry point. |
 | [`chiaki_tap/`](../chiaki_tap/) | The patch that adds a frame tap to chiaki-ng, and how to build it. |
 | [`docs/frame-tap.md`](frame-tap.md) | The frame tap's format, so any app can send its frames to SmoovPlay (Experimental), with a small C writer to start from. |
+| [`docs/macos.md`](macos.md), [`docs/linux.md`](linux.md) | macOS benchmarks, and PS5 Remote Play on Linux. Experimental and community-run: we don't test or support them ourselves. |
 | [`installer/`](../installer/) | `SmoovPlay-Setup.exe` and the SmoovPlay launcher, in C# and WPF. |
 | [`native/rtxvsr/`](../native/rtxvsr/) | Optional wrapper around NVIDIA's RTX Video SDK. |
 | [`scripts/`](../scripts/) | Benchmarks, a model check and a fake chiaki-ng stream for testing without a PS5. |

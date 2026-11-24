@@ -1,5 +1,9 @@
 # SmoovPlay on macOS (Experimental)
 
+> [!NOTE]
+> **Experimental and community-run.** The macOS work comes from contributors, who test it on their own Macs. We
+> don't test or support macOS ourselves, so please put "macOS" in the title of an issue about it.
+
 Can a Mac with Apple Silicon run SmoovPlay's frame generation (RIFE 4.22 lite) fast enough? These two scripts
 answer that on any M-series Mac. They time the model and check its picture against upstream's reference. They
 don't stream from a console, and nothing here changes how SmoovPlay runs on Windows.
