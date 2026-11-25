@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import importlib
 import math
+import os
 import subprocess
 import urllib.error
 import urllib.request
@@ -87,7 +88,8 @@ class RifeInterpolator:
         self.dtype = torch.half if fp16 else torch.float
         self.hdr = hdr
         self.frame_dtype = torch.float16 if hdr else torch.uint8  # what load() takes and interpolate() gives
-        torch.backends.cudnn.benchmark = True
+        # SMOOVPLAY_CUDNN_BENCHMARK=0 turns kernel autotuning off (cuDNN on NVIDIA, MIOpen on AMD), to rule it out.
+        torch.backends.cudnn.benchmark = os.environ.get("SMOOVPLAY_CUDNN_BENCHMARK", "1") != "0"
 
         module_name, modulo = MODELS[version]
         mod = importlib.import_module(f"framegen.rife.{module_name}")

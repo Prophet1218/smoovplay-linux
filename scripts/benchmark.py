@@ -36,6 +36,9 @@ def main() -> None:
     ap.add_argument("--res", nargs="+", default=["1080p", "4k"], choices=list(RES))
     ap.add_argument("--scales", nargs="+", type=float, default=[1.0, 0.5])
     ap.add_argument("--iters", type=int, default=50)
+    ap.add_argument("--warmup", type=int, default=10,
+                    help="untimed runs first (ROCm's MIOpen picks its kernels on the first runs)")
+    ap.add_argument("--graph", choices=["both", "off", "on"], default="both", help="time with GPU graphs off, on or both")
     a = ap.parse_args()
 
     print(f"{torch.cuda.get_device_name(0)}  torch {torch.__version__}")
@@ -46,10 +49,13 @@ def main() -> None:
         frame = torch.randint(0, 256, (h, w, 3), dtype=torch.uint8, device="cuda")
         for model in a.models:
             for scale in a.scales:
-                for graph in (False, True):
+                for graph in {"both": (False, True), "off": (False,), "on": (True,)}[a.graph]:
                     it = RifeInterpolator(w, h, model, scale, cuda_graph=graph)
                     it.load(frame)
                     it.prepare(0)
+                    for _ in range(a.warmup):
+                        it.prepare(1)
+                        it.interpolate(1)
                     prep = gpu_ms(lambda: it.prepare(1), a.iters)
                     interp = gpu_ms(lambda: it.interpolate(1), a.iters)
                     torch.cuda.synchronize()
