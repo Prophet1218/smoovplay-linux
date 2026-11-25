@@ -291,9 +291,10 @@ def main() -> int:
     ap.add_argument("--capture-fourcc", default="MJPG", help="[opencv backend] MJPG, YUY2 or NV12")
     ap.add_argument("--list-devices", action="store_true", help="list capture devices and exit")
     ap.add_argument("--chiaki", action="store_true", help="PS5 Remote Play frames from chiaki-ng's frame tap")
-    ap.add_argument("--chiaki-decoder", default="cuda", choices=["cuda", "sw", "d3d11va"],
+    ap.add_argument("--chiaki-decoder", default="cuda", choices=["cuda", "sw", "d3d11va", "vaapi"],
                     help="how to decode the Remote Play stream (default cuda: NVDEC, frames stay on the GPU, ~1.5 ms "
-                         "a frame; sw takes ~10 ms a frame on gameplay)")
+                         "a frame; sw takes ~10 ms a frame on gameplay; vaapi: Linux AMD/Intel, needs a PyAV built "
+                         "on an FFmpeg with VA-API). On AMD with ROCm, cuda means sw")
     ap.add_argument("--chiaki-log", metavar="CSV", help="write one row per tick: stream facts and pipeline decisions")
     ap.add_argument("--minimize-chiaki", action=argparse.BooleanOptionalAction, default=None,
                     help="minimise chiaki-ng's window while ours is up (it keeps streaming but stops drawing video "
@@ -384,6 +385,12 @@ def main() -> int:
         print(f"[run] no NVIDIA CUDA here: RIFE runs through DirectML (Experimental) on {dml.pick_adapter()['name']}")
         if a.chiaki_decoder == "cuda":
             a.chiaki_decoder = "d3d11va"
+    elif getattr(torch.version, "hip", None):
+        # An AMD card through ROCm (Linux): PyTorch's "cuda" is HIP, but there's no NVDEC. PyAV's own FFmpeg has no
+        # VA-API, so the stream is decoded on the CPU unless asked for vaapi (a PyAV built on the system's FFmpeg).
+        print(f"[run] AMD card through ROCm (HIP {torch.version.hip}): RIFE runs on PyTorch (Experimental)")
+        if a.chiaki_decoder == "cuda":
+            a.chiaki_decoder = "sw"
 
     kind = a.source or ("chiaki" if a.chiaki else "capture" if a.capture is not None else "file" if a.video else None)
     picked = kind  # as asked for: an app's compressed frames on the tap become "chiaki" below, without chiaki-ng

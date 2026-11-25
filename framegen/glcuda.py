@@ -19,6 +19,11 @@ _MEMCPY_DEVICE_TO_DEVICE = 3
 _GL_TEXTURE_2D = 0x0DE1
 
 
+def is_hip() -> bool:
+    """PyTorch built for AMD's ROCm: its "cuda" device is HIP, whose runtime has the same calls with "hip" names."""
+    return bool(getattr(torch.version, "hip", None))
+
+
 def cudart_path() -> str:
     """PyTorch's CUDA runtime: cudart64_*.dll beside torch on Windows; on Linux, the libcudart.so PyTorch has
     already loaded (it ships in the nvidia-cuda-runtime wheel, or in torch/lib for some builds)."""
@@ -28,16 +33,31 @@ def cudart_path() -> str:
             return path
         raise OSError("PyTorch's CUDA runtime (cudart64_*.dll) not found")
     torch.cuda.init()
+    lib = "/libamdhip64.so" if is_hip() else "/libcudart.so"
     with open("/proc/self/maps") as maps:
         for line in maps:
             path = line.split()[-1]
-            if "/libcudart.so" in path:
+            if lib in path:
                 return path
-    raise OSError("PyTorch's CUDA runtime (libcudart.so) isn't loaded")
+    raise OSError(f"PyTorch's GPU runtime ({lib[1:]}) isn't loaded")
 
 
-def _cudart() -> ctypes.CDLL:
-    return ctypes.CDLL(cudart_path())
+class _HipAsCuda:
+    """The HIP runtime under CUDA's names: cudaGraphicsMapResources -> hipGraphicsMapResources, and so on. The GL
+    interop calls used here take the same arguments, and the flags and enum values used here are the same numbers."""
+
+    def __init__(self, lib: ctypes.CDLL) -> None:
+        self._lib = lib
+
+    def __getattr__(self, name: str):
+        if name.startswith("cuda"):
+            return getattr(self._lib, "hip" + name[4:])
+        return getattr(self._lib, name)
+
+
+def _cudart():
+    lib = ctypes.CDLL(cudart_path())
+    return _HipAsCuda(lib) if is_hip() else lib
 
 
 class CudaGLTexture:
