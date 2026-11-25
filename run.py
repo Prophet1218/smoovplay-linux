@@ -800,6 +800,9 @@ def main() -> int:
         print(f"[run] scheduling: MMCSS {'on' if boost_thread() else 'off'}, "
               f"GPU priority {'high' if boost_gpu() else 'normal'}, "
               f"screen kept on {'yes' if keep_screen_on() else 'no'}")  # (a controller isn't input to Windows)
+        if sys.platform.startswith("linux") and getattr(torch.version, "hip", None):
+            from framegen.amdpower import keep_clocks_high
+            amd_clocks = keep_clocks_high()  # noqa: F841 - restored at exit
     try:
         while True:
             started.clear()
